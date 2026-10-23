@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>KI-S.S Hub install</title>
+<style>
+:root{--bg:#f4f5f7;--card:#fff;--text:#1d2330;--muted:#5d6676;--line:#dde1e8;--accent:#1f6f4a;--accent-ink:#fff;--bad:#b3261e;--ok:#1f6f4a}
+@media (prefers-color-scheme:dark){:root{--bg:#14171c;--card:#1d2128;--text:#e7eaf0;--muted:#9aa3b2;--line:#2e343e;--accent:#3fa874;--accent-ink:#0d1a12;--bad:#ff8a80;--ok:#7fd3a6}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:520px;margin:0 auto;padding:48px 16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:28px}
+h1{font-size:22px;margin:0 0 4px}
+.sub{color:var(--muted);margin:0 0 22px}
+label{display:block;font-weight:600;margin-bottom:6px}
+input{width:100%;font:inherit;font-size:20px;letter-spacing:.06em;text-transform:uppercase;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:transparent;color:var(--text)}
+input:focus{outline:2px solid var(--accent);outline-offset:1px}
+button{margin-top:14px;width:100%;font:inherit;font-weight:600;font-size:17px;padding:13px;border:0;border-radius:10px;background:var(--accent);color:var(--accent-ink);cursor:pointer}
+button:disabled{opacity:.55;cursor:default}
+#msg{min-height:24px;margin-top:12px}
+.bad{color:var(--bad)}.ok{color:var(--ok)}
+.bar{height:6px;background:var(--line);border-radius:3px;overflow:hidden;margin-top:12px;display:none}
+.bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
+ol{padding-left:20px;margin:22px 0 0;color:var(--muted)}
+ol li{margin:6px 0}
+b{color:var(--text)}
+footer{color:var(--muted);font-size:13px;text-align:center;margin-top:18px}
+</style>
+</head>
+<body>
+<main>
+  <div class="card">
+    <h1>KI-S.S Hub</h1>
+    <p class="sub">Install on a store PC</p>
+    <form id="f" autocomplete="off">
+      <label for="code">Store code</label>
+      <input id="code" placeholder="e.g. ROYALPARK-7Q4K-M2XD" spellcheck="false" autocapitalize="characters">
+      <button id="go" type="submit">Install</button>
+    </form>
+    <div class="bar" id="bar"><i id="fill"></i></div>
+    <div id="msg"></div>
+    <ol>
+      <li>Type the code you were sent and press <b>Install</b>. The download is about 60 MB.</li>
+      <li>Open the downloaded <b>KI-S.S-Hub-Setup</b> file. If Windows says <b>"Windows protected your PC"</b>, click <b>More info</b>, then <b>Run anyway</b>.</li>
+      <li>When the Hub opens, press <b>Yes — set up this PC</b>. Classic Outlook should be signed in first.</li>
+    </ol>
+  </div>
+  <footer id="ver"></footer>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+const say = (t, cls) => { $("msg").textContent = t; $("msg").className = cls || ""; };
+let manifest = null;
+fetch("manifest.json", { cache: "no-store" }).then(r => r.json()).then(m => {
+  manifest = m; if (m.version) $("ver").textContent = "Version " + m.version;
+}).catch(() => say("The page couldn't load - check the internet connection and refresh.", "bad"));
+
+async function unlock(code) {
+  const norm = code.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(norm), "PBKDF2", false, ["deriveKey"]);
+  const kek = await crypto.subtle.deriveKey({ name: "PBKDF2", salt: b64(manifest.salt), iterations: manifest.rounds, hash: "SHA-256" },
+    base, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
+  for (const e of manifest.entries) {
+    try {
+      const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: b64(e.iv) }, kek, b64(e.data));
+      return JSON.parse(new TextDecoder().decode(plain));
+    } catch (err) { /* not this one */ }
+  }
+  return null;
+}
+
+async function download(size) {
+  const res = await fetch(manifest.file, { cache: "no-store" });
+  if (!res.ok || !res.body) throw new Error("download failed (" + res.status + ")");
+  const reader = res.body.getReader(), parts = []; let got = 0;
+  $("bar").style.display = "block";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    parts.push(value); got += value.length;
+    $("fill").style.width = Math.min(100, Math.round(got / (size * 1.0001 + 16) * 100)) + "%";
+  }
+  $("fill").style.width = "100%";
+  const all = new Uint8Array(got); let at = 0;
+  for (const p of parts) { all.set(p, at); at += p.length; }
+  return all;
+}
+
+$("f").onsubmit = async ev => {
+  ev.preventDefault();
+  if (!manifest) return;
+  const code = $("code").value.trim();
+  if (!code) { say("Type the store code first.", "bad"); return; }
+  $("go").disabled = true;
+  try {
+    say("Checking the code…");
+    const hit = await unlock(code);
+    if (!hit) { say("That code isn't right, or it has been changed. Check it with Simon.", "bad"); return; }
+    say(`Code for ${hit.name}. Downloading…`);
+    const enc = await download(manifest.size);
+    say("Unpacking…");
+    const key = await crypto.subtle.importKey("raw", b64(hit.k), "AES-GCM", false, ["decrypt"]);
+    const exe = await crypto.subtle.decrypt({ name: "AES-GCM", iv: b64(manifest.file_iv) }, key, enc);
+    const url = URL.createObjectURL(new Blob([exe], { type: "application/octet-stream" }));
+    const a = document.createElement("a");
+    a.href = url; a.download = `KI-S.S-Hub-Setup (${hit.store}).exe`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    say(`Downloaded for ${hit.name}. Open it from the browser's downloads to install.`, "ok");
+  } catch (err) {
+    say("Something went wrong: " + err.message + ". Refresh and try again.", "bad");
+  } finally { $("go").disabled = false; }
+};
+</script>
+</body>
+</html>
+<!-- -->
