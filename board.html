@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Staff Notice Board</title>
+<!-- SSWIFT staff notice board (v3.236). Opened full screen on the staff-room TV:
+     board.html?u=<staff links web app /exec address>&k=<board key>   (the Hub's Notice Board panel shows the full link) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+:root{--blue:#1a6fd6;--ink:#14202e;--mute:#5d6b7a;--line:#d5dde6;--band:#eef3f9;--today:#fff4cc;--in:#0b7a3b;--out:#a33;--bg:#f7f9fb}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--bg);color:var(--ink);font-family:"Segoe UI",Roboto,Arial,sans-serif;overflow:hidden;cursor:none}
+#night{position:fixed;inset:0;background:#000;display:none;z-index:9}
+header{height:9vh;display:flex;align-items:center;gap:2vw;padding:0 2.2vw;background:var(--hd,var(--blue));color:#fff;transition:background .4s}
+body[data-k=this]{--hd:#137a3e;--th:#0d5c2e}
+body[data-k=next]{--hd:#6a3fb5;--th:#4f2c8c}
+body[data-k=notice]{--hd:#1a6fd6}
+.pill{display:none;background:#fff;color:var(--hd);font-weight:800;font-size:3.6vh;letter-spacing:.06em;padding:.25vh 1.4vw;border-radius:1vh;text-transform:uppercase}
+body[data-k=this] .pill,body[data-k=next] .pill{display:inline-block}
+header h1{font-size:4.4vh;font-weight:700;letter-spacing:.02em}
+header .sub{font-size:2.8vh;opacity:.92}
+header .clock{margin-left:auto;text-align:right;font-size:2.4vh;line-height:1.25}
+header .clock b{font-size:4vh;display:block}
+main{position:absolute;top:9vh;bottom:4.5vh;left:0;right:0;padding:1.2vh 1.4vw}
+footer{position:absolute;bottom:0;left:0;right:0;height:4.5vh;display:flex;align-items:center;gap:1.4vw;padding:0 2vw;font-size:2vh;color:var(--mute);border-top:1px solid var(--line);background:#fff}
+footer .dots{margin-left:auto;display:flex;gap:.6vw}
+footer .dots i{width:1.2vh;height:1.2vh;border-radius:50%;background:var(--line)}
+footer .dots i.on{background:var(--blue)}
+footer .warn{color:var(--out);font-weight:600}
+.slide{position:absolute;inset:1.2vh 1.4vw;display:none}
+.slide.show{display:block}
+table{width:100%;height:auto;border-collapse:collapse;table-layout:fixed;background:#fff;font-size:var(--fs,2.2vh)}
+th,td{border:1px solid var(--line);padding:.1em .35em;vertical-align:top;line-height:1.12;overflow:hidden}
+thead th{background:var(--th,var(--ink));color:#fff;font-weight:600;text-align:center}
+thead th.name{text-align:left;width:16%}
+thead th.today{background:#c98a00}
+td.today{background:var(--today)}
+tr.z td{background:#dde5ee}
+tr.z td.today{background:#f2df98}
+tr.dept td{background:var(--band);font-weight:700;color:var(--th,var(--blue));text-transform:uppercase;letter-spacing:.04em;font-size:.72em;padding:0 .4em;line-height:1.3}
+td.name{font-weight:600;white-space:nowrap;text-overflow:ellipsis}
+.s{white-space:nowrap}
+.l{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.s.out{color:var(--out);text-decoration:line-through;opacity:.75}
+.s.in{color:var(--in);font-weight:700}
+.n{font-size:.75em;color:var(--mute);margin-left:.3em}
+.s.in+.n{color:var(--in)}
+.empty{display:flex;height:100%;align-items:center;justify-content:center;font-size:4vh;color:var(--mute);text-align:center}
+.notice{display:flex;align-items:center;justify-content:center;height:100%}
+.notice img,.notice canvas{max-width:100%;max-height:100%;box-shadow:0 .4vh 2vh rgba(0,0,0,.18);background:#fff}
+.quote{display:flex !important;flex-direction:row;align-items:center;justify-content:center;gap:5vw;padding:0 6vw}
+.quote .toon{flex:0 0 34vh;height:34vh;animation:bob 3s ease-in-out infinite}
+.quote .toon svg{width:100%;height:100%}
+@keyframes bob{0%,100%{transform:translateY(0) rotate(-3deg)}50%{transform:translateY(-2vh) rotate(3deg)}}
+.quote .qtext{flex:1;text-align:left;max-width:62vw}
+.quote .qmark{font-size:20vh;line-height:.6;color:var(--blue);font-family:Georgia,serif;height:9vh}
+.quote p{font-size:6.4vh;font-weight:700;line-height:1.25;color:var(--ink)}
+.quote .qwho{margin-top:2vh;font-size:3.6vh;font-weight:600;color:var(--blue)}
+.quote .qby{margin-top:3vh;font-size:2.4vh;color:var(--mute);letter-spacing:.12em;text-transform:uppercase}
+.joke .bubble{position:relative;background:#fff;border:.5vh solid var(--blue);border-radius:4vh;padding:3vh 3.5vw;box-shadow:0 1vh 3vh rgba(0,0,0,.08)}
+.joke .bubble:before{content:"";position:absolute;left:-3.2vh;top:45%;border:2.2vh solid transparent;border-right:3vh solid var(--blue)}
+.joke .jq{font-size:5.6vh;margin:0}
+.joke .ja{font-size:6vh;font-weight:800;color:#c25e00;margin-top:4vh;opacity:0;transform:scale(.6);transition:all .6s cubic-bezier(.2,1.6,.4,1)}
+.joke .ja.on{opacity:1;transform:scale(1)}
+#msg{position:fixed;inset:0;display:none;align-items:center;justify-content:center;font-size:3.4vh;color:var(--mute);text-align:center;padding:10vw;background:var(--bg);z-index:5}
+</style>
+</head>
+<body>
+<header><h1 id="store">Staff Notice Board</h1><span class="pill" id="pill"></span><span class="sub" id="what"></span>
+  <div class="clock"><b id="time"></b><span id="date"></span></div></header>
+<main id="stage"></main>
+<footer><span id="upd"></span><span class="warn" id="warn"></span><span class="dots" id="dots"></span></footer>
+<div id="msg"></div>
+<div id="night"></div>
+<script>
+(function () {
+  "use strict";
+  var TZ = "Australia/Adelaide", POLL_MS = 5 * 60 * 1000, MAX_PDF_PAGES = 8;
+  var q = new URLSearchParams(location.search), U = q.get("u") || "", K = q.get("k") || "";
+  var $ = function (id) { return document.getElementById(id); };
+  var data = null, slides = [], at = 0, timer = null, files = {}, lastOk = 0, loadedDay = today();
+  var QUOTES = [["Teamwork makes the long shifts shorter.", ""], ["Alone we can do so little; together we can do so much.", "Helen Keller"], ["Every customer remembers how we made them feel.", ""], ["Do it right the first time and you only do it once.", ""], ["Well done is better than well said.", "Benjamin Franklin"], ["Help a teammate today - tomorrow it might be you.", ""], ["Smile at the next customer. It's free and it works.", ""], ["Ask questions. Nobody knows everything on day one.", ""], ["Do what you can, with what you have, where you are.", "Theodore Roosevelt"], ["Pride in the little jobs shows in the big ones.", ""], ["A full shelf is a happy customer.", ""], ["No act of kindness, no matter how small, is ever wasted.", "Aesop"], ["Be the reason someone's shopping was easy today.", ""], ["Safety first - every shift, every time.", ""], ["Good habits beat good intentions.", ""], ["Energy and persistence conquer all things.", "Benjamin Franklin"], ["Leave your section better than you found it.", ""], ["We win together, we learn together.", ""], ["One kind word can turn a customer's day around.", ""], ["Great things are done by a series of small things brought together.", "Vincent van Gogh"], ["Consistency builds trust - with customers and each other.", ""], ["Speak up if something's not right. That's teamwork.", ""], ["Hard work today makes tomorrow easier.", ""], ["Nothing will work unless you do.", "Maya Angelou"], ["The best way to learn is to have a go.", ""], ["Every role in this store matters.", ""], ["Talent wins games, but teamwork and intelligence win championships.", "Michael Jordan"], ["A clean store is a safe store.", ""], ["Rushed jobs get redone. Steady jobs get done.", ""], ["Know your products, help your customers.", ""], ["Start where you are. Use what you have. Do what you can.", "Arthur Ashe"], ["Thank the person who helped you today.", ""], ["Busy days pass faster with a good team.", ""], ["Little improvements every day add up to big ones.", ""], ["A journey of a thousand miles begins with a single step.", "Lao Tzu"], ["Listen first - the customer usually tells you what they need.", ""], ["Rotate stock: first in, first out, every time.", ""], ["Treat the store like it's your own.", ""], ["Many hands make light work.", "Proverb"], ["Patience is part of great service.", ""], ["Ask 'can I help you find anything?' - it makes a difference.", ""], ["Be on time, be ready, be part of the team.", ""], ["If you want to go fast, go alone. If you want to go far, go together.", "African proverb"], ["Mistakes are how we learn. Hiding them is how we don't.", ""], ["A great team makes a great store.", ""], ["Look after each other - especially on the busy days.", ""], ["Coming together is a beginning, keeping together is progress, working together is success.", "Henry Ford"], ["Quality checks today mean happy customers tomorrow.", ""], ["Energy is contagious. Bring the good kind.", ""], ["Good communication saves a lot of extra work.", ""], ["Quality means doing it right when no one is looking.", "Henry Ford"], ["Your effort is noticed, even when no one says it.", ""], ["Take care of the details and the big picture takes care of itself.", ""], ["Every shift is a chance to do something well.", ""], ["The best way to find yourself is to lose yourself in the service of others.", "Mahatma Gandhi"], ["Teamwork is doing your part and helping with theirs.", ""], ["Stay curious - there's always a better way.", ""], ["Excellence is not a skill. It's an attitude.", "Ralph Marston"], ["Be proud of what we build together.", ""], ["Positive attitude, positive day.", ""], ["Clean as you go - future you will say thanks.", ""], ["It does not matter how slowly you go as long as you do not stop.", "Confucius"], ["Shared knowledge makes everyone stronger.", ""], ["A good handover makes the next shift a good shift.", ""], ["Respect goes both ways - give it and you'll get it.", ""], ["Happiness is not by chance, but by choice.", "Jim Rohn"], ["Celebrate the wins, learn from the rest.", ""], ["Great stores are built one shift at a time.", ""], ["Work hard, be kind, help out.", ""], ["Kind words can be short and easy to speak, but their echoes are truly endless.", "Mother Teresa"], ["The little extra is what customers remember.", ""], ["Finish strong - the last hour counts too.", ""], ["Teamwork divides the task and multiplies the success.", "Proverb"]];
+  var JOKES = [["Why did the banana go to the doctor?", "It wasn't peeling well."], ["What do you call cheese that isn't yours?", "Nacho cheese."], ["Why did the tomato blush?", "It saw the salad dressing."], ["Why don't eggs tell jokes?", "They'd crack each other up."], ["What did the grape say when it got stepped on?", "Nothing - it just let out a little wine."], ["Why did the bread break up with the butter?", "It felt like it was being spread too thin."], ["What's a potato's favourite TV show?", "Anything on the couch, as long as it's a couch potato."], ["Why did the cookie go to hospital?", "It felt crummy."], ["What do you call a sad strawberry?", "A blueberry."], ["Why was the trolley so tired?", "It had been pushed around all day."], ["How do you fix a broken pizza?", "With tomato paste."], ["What did the lettuce say to the celery?", "Quit stalking me!"], ["Why did the orange stop halfway across the road?", "It ran out of juice."], ["What do you call a fake noodle?", "An impasta."], ["Why did the milk get promoted?", "It always went the extra mile... before its use-by date."], ["What did one plate say to the other?", "Dinner's on me."], ["Why are mushrooms always invited to parties?", "Because they're fungis."], ["What do you call a cow with no legs?", "Ground beef."], ["What's orange and sounds like a parrot?", "A carrot."], ["Why did the coffee file a police report?", "It got mugged."], ["What do you call a peanut in a spacesuit?", "An astro-nut."], ["Why did the apple stop in the middle of the aisle?", "It wanted to be the apple of someone's eye."], ["Why do bananas wear sunscreen?", "So they don't peel."], ["What did the baby corn say to the mama corn?", "Where's pop corn?"], ["Why did the egg hide?", "It was a little chicken."], ["How does the ocean say hello?", "It waves."], ["What kind of key opens a banana?", "A mon-key."], ["Why did the shelf feel lonely?", "Nobody had faced up to it today."], ["What did the cheese say when it looked in the mirror?", "Halloumi!"], ["Why did the scarecrow win an award?", "He was outstanding in his field."], ["What's the best thing to put in a pie?", "Your teeth."], ["Why did the grocery clerk bring a ladder to work?", "They heard prices were going through the roof."], ["What do you call an angry carrot?", "A steamed vegetable."], ["Why did the student eat their homework?", "The teacher said it was a piece of cake."], ["What did the bread say on its day off?", "Loaf you all - see you tomorrow."], ["What do lemons do when they're hurt?", "They call for lemon-aid."], ["Why did the cucumber need a lawyer?", "It was in a pickle."], ["What's a ghost's favourite fruit?", "Boo-berries."], ["Why don't skeletons fight each other?", "They don't have the guts."], ["What do you call a sleeping bull?", "A bulldozer."]];
+  var TOONS = ["<svg viewBox=\"0 0 200 200\"><path d=\"M100 50 C60 30 25 60 30 105 C35 160 75 185 100 172 C125 185 165 160 170 105 C175 60 140 30 100 50Z\" fill=\"#e8413a\"/><path d=\"M100 52 Q98 30 110 18\" stroke=\"#6b4423\" stroke-width=\"7\" fill=\"none\" stroke-linecap=\"round\"/><path d=\"M106 34 C125 18 150 22 156 30 C140 44 120 44 106 34Z\" fill=\"#3cae4a\"/><ellipse cx=\"70\" cy=\"80\" rx=\"10\" ry=\"18\" fill=\"#fff\" opacity=\".35\"/><g transform=\"translate(100 110) scale(1)\"><circle cx=\"-14\" cy=\"0\" r=\"6\" fill=\"#1b2430\"/><circle cx=\"14\" cy=\"0\" r=\"6\" fill=\"#1b2430\"/><circle cx=\"-12\" cy=\"-2\" r=\"2\" fill=\"#fff\"/><circle cx=\"16\" cy=\"-2\" r=\"2\" fill=\"#fff\"/><path d=\"M-16 16 Q0 32 16 16\" stroke=\"#1b2430\" stroke-width=\"5\" fill=\"none\" stroke-linecap=\"round\"/><circle cx=\"-26\" cy=\"14\" r=\"6\" fill=\"#ff8fa3\" opacity=\".7\"/><circle cx=\"26\" cy=\"14\" r=\"6\" fill=\"#ff8fa3\" opacity=\".7\"/></g></svg>", "<svg viewBox=\"0 0 200 200\"><path d=\"M70 50 L130 50 L104 190 Q100 198 96 190Z\" fill=\"#f28c28\"/><path d=\"M88 118 h12 M104 140 h10 M92 162 h8\" stroke=\"#d26a10\" stroke-width=\"4\" stroke-linecap=\"round\"/><path d=\"M100 50 Q85 15 70 10 M100 50 Q100 10 100 4 M100 50 Q118 15 132 10\" stroke=\"#3cae4a\" stroke-width=\"9\" fill=\"none\" stroke-linecap=\"round\"/><path d=\"M128 92 Q152 82 160 60\" stroke=\"#f28c28\" stroke-width=\"9\" fill=\"none\" stroke-linecap=\"round\"/><circle cx=\"162\" cy=\"56\" r=\"9\" fill=\"#f28c28\"/><path d=\"M72 92 Q55 105 50 120\" stroke=\"#f28c28\" stroke-width=\"9\" fill=\"none\" stroke-linecap=\"round\"/><g transform=\"translate(100 78) scale(0.8)\"><circle cx=\"-14\" cy=\"0\" r=\"6\" fill=\"#1b2430\"/><circle cx=\"14\" cy=\"0\" r=\"6\" fill=\"#1b2430\"/><circle cx=\"-12\" cy=\"-2\" r=\"2\" fill=\"#fff\"/><circle cx=\"16\" cy=\"-2\" r=\"2\" fill=\"#fff\"/><path d=\"M-16 16 Q0 32 16 16\" stroke=\"#1b2430\" stroke-width=\"5\" fill=\"none\" stroke-linecap=\"round\"/><circle cx=\"-26\" cy=\"14\" r=\"6\" fill=\"#ff8fa3\" opacity=\".7\"/><circle cx=\"26\" cy=\"14\" r=\"6\" fill=\"#ff8fa3\" opacity=\".7\"/></g></svg>", "<svg viewBox=\"0 0 200 200\"><path d=\"M20 40 h28 l22 90 h96 l16-62 H58\" stroke=\"#1a6fd6\" stroke-width=\"10\" fill=\"none\" stroke-linejoin=\"round\" stroke-linecap=\"round\"/><rect x=\"62\" y=\"66\" width=\"110\" height=\"58\" rx=\"10\" fill=\"#cfe2fb\"/><circle cx=\"82\" cy=\"160\" r=\"14\" fill=\"#1b2430\"/><circle cx=\"150\" cy=\"160\" r=\"14\" fill=\"#1b2430\"/><path d=\"M150 18 C150 6 166 6 166 18 C166 6 182 6 182 18 C182 32 166 40 166 44 C166 40 150 32 150 18Z\" fill=\"#e8413a\"/><g transform=\"translate(117 92) scale(0.75)\"><circle cx=\"-14\" cy=\"0\" r=\"6\" fill=\"#1b2430\"/><circle cx=\"14\" cy=\"0\" r=\"6\" fill=\"#1b2430\"/><circle cx=\"-12\" cy=\"-2\" r=\"2\" fill=\"#fff\"/><circle cx=\"16\" cy=\"-2\" r=\"2\" fill=\"#fff\"/><path d=\"M-16 16 Q0 32 16 16\" stroke=\"#1b2430\" stroke-width=\"5\" fill=\"none\" stroke-linecap=\"round\"/><circle cx=\"-26\" cy=\"14\" r=\"6\" fill=\"#ff8fa3\" opacity=\".7\"/><circle cx=\"26\" cy=\"14\" r=\"6\" fill=\"#ff8fa3\" opacity=\".7\"/></g></svg>", "<svg viewBox=\"0 0 200 200\"><path d=\"M30 100 C25 55 70 45 100 45 C130 45 175 55 170 100 L165 165 Q165 175 155 175 H45 Q35 175 35 165Z\" fill=\"#e7a95b\"/><path d=\"M40 100 C38 70 70 62 100 62 C130 62 162 70 160 100\" stroke=\"#c7832f\" stroke-width=\"5\" fill=\"none\"/><path d=\"M70 55 l8 14 M100 50 l0 15 M130 55 l-8 14\" stroke=\"#fff3df\" stroke-width=\"5\" stroke-linecap=\"round\"/><g transform=\"translate(100 122) scale(1)\"><circle cx=\"-14\" cy=\"0\" r=\"6\" fill=\"#1b2430\"/><circle cx=\"14\" cy=\"0\" r=\"6\" fill=\"#1b2430\"/><circle cx=\"-12\" cy=\"-2\" r=\"2\" fill=\"#fff\"/><circle cx=\"16\" cy=\"-2\" r=\"2\" fill=\"#fff\"/><path d=\"M-16 16 Q0 32 16 16\" stroke=\"#1b2430\" stroke-width=\"5\" fill=\"none\" stroke-linecap=\"round\"/><circle cx=\"-26\" cy=\"14\" r=\"6\" fill=\"#ff8fa3\" opacity=\".7\"/><circle cx=\"26\" cy=\"14\" r=\"6\" fill=\"#ff8fa3\" opacity=\".7\"/></g></svg>", "<svg viewBox=\"0 0 200 200\"><path d=\"M55 70 L100 30 L145 70 V180 H55Z\" fill=\"#fff\" stroke=\"#1a6fd6\" stroke-width=\"6\" stroke-linejoin=\"round\"/><path d=\"M55 70 H145\" stroke=\"#1a6fd6\" stroke-width=\"6\"/><rect x=\"55\" y=\"140\" width=\"90\" height=\"40\" fill=\"#1a6fd6\"/><path d=\"M88 30 h24 v-12 h-24z\" fill=\"#1a6fd6\"/><g transform=\"translate(100 105) scale(0.9)\"><circle cx=\"-14\" cy=\"0\" r=\"6\" fill=\"#1b2430\"/><circle cx=\"14\" cy=\"0\" r=\"6\" fill=\"#1b2430\"/><circle cx=\"-12\" cy=\"-2\" r=\"2\" fill=\"#fff\"/><circle cx=\"16\" cy=\"-2\" r=\"2\" fill=\"#fff\"/><path d=\"M-16 16 Q0 32 16 16\" stroke=\"#1b2430\" stroke-width=\"5\" fill=\"none\" stroke-linecap=\"round\"/><circle cx=\"-26\" cy=\"14\" r=\"6\" fill=\"#ff8fa3\" opacity=\".7\"/><circle cx=\"26\" cy=\"14\" r=\"6\" fill=\"#ff8fa3\" opacity=\".7\"/></g></svg>", "<svg viewBox=\"0 0 200 200\"><g stroke=\"#f5b400\" stroke-width=\"10\" stroke-linecap=\"round\"><path d=\"M100 10v22M100 168v22M10 100h22M168 100h22M36 36l16 16M148 148l16 16M36 164l16-16M148 52l16-16\"/></g><circle cx=\"100\" cy=\"100\" r=\"58\" fill=\"#ffd23f\"/><g transform=\"translate(100 100) scale(1.1)\"><circle cx=\"-14\" cy=\"0\" r=\"6\" fill=\"#1b2430\"/><circle cx=\"14\" cy=\"0\" r=\"6\" fill=\"#1b2430\"/><circle cx=\"-12\" cy=\"-2\" r=\"2\" fill=\"#fff\"/><circle cx=\"16\" cy=\"-2\" r=\"2\" fill=\"#fff\"/><path d=\"M-16 16 Q0 32 16 16\" stroke=\"#1b2430\" stroke-width=\"5\" fill=\"none\" stroke-linecap=\"round\"/><circle cx=\"-26\" cy=\"14\" r=\"6\" fill=\"#ff8fa3\" opacity=\".7\"/><circle cx=\"26\" cy=\"14\" r=\"6\" fill=\"#ff8fa3\" opacity=\".7\"/></g></svg>", "<svg viewBox=\"0 0 200 200\"><path d=\"M40 40 C30 120 90 180 170 150 C175 140 172 132 160 132 C100 140 70 100 62 40Z\" fill=\"#ffd93b\" stroke=\"#e0b400\" stroke-width=\"5\" stroke-linejoin=\"round\"/><path d=\"M40 40 l10 -14 l14 6 Z\" fill=\"#7a5a1d\"/><path d=\"M160 132 l16 4 l-4 12z\" fill=\"#7a5a1d\"/><g transform=\"translate(98 110) scale(0.85)\"><circle cx=\"-14\" cy=\"0\" r=\"6\" fill=\"#1b2430\"/><circle cx=\"14\" cy=\"0\" r=\"6\" fill=\"#1b2430\"/><circle cx=\"-12\" cy=\"-2\" r=\"2\" fill=\"#fff\"/><circle cx=\"16\" cy=\"-2\" r=\"2\" fill=\"#fff\"/><path d=\"M-16 12 Q0 36 16 12Z\" fill=\"#1b2430\"/><path d=\"M-9 22 Q0 30 9 22\" fill=\"#ff6b81\"/><circle cx=\"-26\" cy=\"14\" r=\"6\" fill=\"#ff8fa3\" opacity=\".7\"/><circle cx=\"26\" cy=\"14\" r=\"6\" fill=\"#ff8fa3\" opacity=\".7\"/></g></svg>", "<svg viewBox=\"0 0 200 200\"><path d=\"M100 18 C55 18 38 95 40 125 C42 165 70 186 100 186 C130 186 158 165 160 125 C162 95 145 18 100 18Z\" fill=\"#fff6e6\" stroke=\"#e8c78f\" stroke-width=\"5\"/><path d=\"M70 60 l12 10 l-6 12 l14 6\" stroke=\"#c9a46a\" stroke-width=\"4\" fill=\"none\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><g transform=\"translate(100 118) scale(1)\"><circle cx=\"-14\" cy=\"0\" r=\"6\" fill=\"#1b2430\"/><circle cx=\"14\" cy=\"0\" r=\"6\" fill=\"#1b2430\"/><circle cx=\"-12\" cy=\"-2\" r=\"2\" fill=\"#fff\"/><circle cx=\"16\" cy=\"-2\" r=\"2\" fill=\"#fff\"/><path d=\"M-16 12 Q0 36 16 12Z\" fill=\"#1b2430\"/><path d=\"M-9 22 Q0 30 9 22\" fill=\"#ff6b81\"/><circle cx=\"-26\" cy=\"14\" r=\"6\" fill=\"#ff8fa3\" opacity=\".7\"/><circle cx=\"26\" cy=\"14\" r=\"6\" fill=\"#ff8fa3\" opacity=\".7\"/></g></svg>", "<svg viewBox=\"0 0 200 200\"><path d=\"M20 150 L180 150 L180 70 L20 120 Z\" fill=\"#ffcf3f\" stroke=\"#e0a800\" stroke-width=\"5\" stroke-linejoin=\"round\"/><path d=\"M20 120 L180 70 L150 50 Z\" fill=\"#ffe27a\" stroke=\"#e0a800\" stroke-width=\"5\" stroke-linejoin=\"round\"/><circle cx=\"60\" cy=\"135\" r=\"9\" fill=\"#e9b52a\"/><circle cx=\"160\" cy=\"95\" r=\"11\" fill=\"#e9b52a\"/><circle cx=\"150\" cy=\"135\" r=\"7\" fill=\"#e9b52a\"/><g transform=\"translate(105 118) scale(0.85)\"><circle cx=\"-14\" cy=\"0\" r=\"6\" fill=\"#1b2430\"/><circle cx=\"14\" cy=\"0\" r=\"6\" fill=\"#1b2430\"/><circle cx=\"-12\" cy=\"-2\" r=\"2\" fill=\"#fff\"/><circle cx=\"16\" cy=\"-2\" r=\"2\" fill=\"#fff\"/><path d=\"M-16 12 Q0 36 16 12Z\" fill=\"#1b2430\"/><path d=\"M-9 22 Q0 30 9 22\" fill=\"#ff6b81\"/><circle cx=\"-26\" cy=\"14\" r=\"6\" fill=\"#ff8fa3\" opacity=\".7\"/><circle cx=\"26\" cy=\"14\" r=\"6\" fill=\"#ff8fa3\" opacity=\".7\"/></g></svg>"];
+  function quoteOfDay() {                                   // v3.242: a new one each day, same on every screen
+    var d = today().split("-"), n = Math.floor(Date.UTC(+d[0], +d[1] - 1, +d[2]) / 864e5);
+    return { q: QUOTES[n % QUOTES.length], toon: TOONS[n % TOONS.length] };
+  }
+  function jokeOfDay() {                                     // v3.242: a different joke and character each day
+    var d = today().split("-"), n = Math.floor(Date.UTC(+d[0], +d[1] - 1, +d[2]) / 864e5);
+    return { j: JOKES[n % JOKES.length], toon: TOONS[(n + 3) % TOONS.length] };
+  }
+  if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+  function parts() {
+    var p = {};
+    new Intl.DateTimeFormat("en-AU", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+      .formatToParts(new Date()).forEach(function (x) { p[x.type] = x.value; });
+    return p;
+  }
+  function today() { var p = parts(); return p.year + "-" + p.month + "-" + p.day; }
+  function minutesNow() { var p = parts(); return +p.hour * 60 + +p.minute; }
+  function mins(hm) { var a = String(hm || "").split(":"); return +a[0] * 60 + +a[1]; }
+  function isOn() {
+    var s = (data && data.settings) || { on: "05:30", off: "22:00" }, n = minutesNow(), a = mins(s.on), b = mins(s.off);
+    return a <= b ? n >= a && n < b : n >= a || n < b;
+  }
+  function tick() {
+    var d = new Date();
+    $("time").textContent = d.toLocaleTimeString("en-AU", { timeZone: TZ, hour: "numeric", minute: "2-digit" });
+    $("date").textContent = d.toLocaleDateString("en-AU", { timeZone: TZ, weekday: "long", day: "numeric", month: "long" });
+    var on = isOn();
+    $("night").style.display = on ? "none" : "block";
+    if (!on && today() !== loadedDay) location.reload();          // fresh page once a day, overnight
+    var stale = lastOk && Date.now() - lastOk > 30 * 60 * 1000;
+    $("warn").textContent = stale ? "Can't reach the Hub board - showing the last copy" : "";
+  }
+  function msg(t) { $("msg").style.display = t ? "flex" : "none"; $("msg").textContent = t || ""; }
+
+  /* ---------- data ---------- */
+  /* 2026-11-10: a time limit - straight after power-on the Wi-Fi isn't up and a request could hang for ever */
+  function get(extra) {
+    var ctl = window.AbortController ? new AbortController() : null;
+    var t = ctl && setTimeout(function () { ctl.abort(); }, 45000);
+    return fetch(U + (U.indexOf("?") < 0 ? "?" : "&") + "b=" + encodeURIComponent(K) + (extra || ""),
+                 ctl ? { cache: "no-store", signal: ctl.signal } : { cache: "no-store" })
+      .then(function (r) { if (t) clearTimeout(t); return r.json(); }, function (e) { if (t) clearTimeout(t); throw e; })
+      .then(function (j) { if (!j.ok) throw new Error(j.error || "No answer"); return j; });
+  }
+  function save(j) { try { localStorage.setItem("board", JSON.stringify(j)); } catch (e) {} }
+  function saved() { try { return JSON.parse(localStorage.getItem("board") || "null"); } catch (e) { return null; } }
+
+  function b64bytes(b64) {
+    var bin = atob(b64), out = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+  function fit(w, h) {
+    var box = $("stage").getBoundingClientRect(), s = Math.min((box.width - 30) / w, (box.height - 30) / h);
+    return Math.max(s, 0.1);
+  }
+  /* 2026-11-10: a TV stick has little memory - keep each PDF page as a small JPEG picture, not a full-size drawing */
+  function toImage(c) {
+    return new Promise(function (ok) {
+      var done = function (url) { c.width = c.height = 0; var img = new Image(); img.src = url; ok(img); };
+      if (c.toBlob) c.toBlob(function (b) { done(b ? URL.createObjectURL(b) : c.toDataURL("image/jpeg", 0.85)); }, "image/jpeg", 0.85);
+      else done(c.toDataURL("image/jpeg", 0.85));
+    });
+  }
+  function loadFile(n) {
+    if (files[n.id]) return files[n.id];
+    files[n.id] = get("&f=" + encodeURIComponent(n.id)).then(function (j) {
+      if (/pdf/.test(j.mime)) {
+        if (!window.pdfjsLib) throw new Error("PDF reader didn't load");
+        return pdfjsLib.getDocument({ data: b64bytes(j.data) }).promise.then(function (pdf) {
+          var jobs = [];
+          for (var p = 1; p <= Math.min(pdf.numPages, MAX_PDF_PAGES); p++) {
+            jobs.push(pdf.getPage(p).then(function (page) {
+              var v1 = page.getViewport({ scale: 1 }), v = page.getViewport({ scale: fit(v1.width, v1.height) });
+              var c = document.createElement("canvas");
+              c.width = Math.round(v.width); c.height = Math.round(v.height);
+              return page.render({ canvasContext: c.getContext("2d"), viewport: v }).promise.then(function () { return toImage(c); });
+            }));
+          }
+          return Promise.all(jobs).then(function (imgs) { try { pdf.destroy(); } catch (e) {} return imgs; });
+        });
+      }
+      var img = new Image();
+      img.src = "data:" + j.mime + ";base64," + j.data;
+      return [img];
+    }).catch(function (e) { delete files[n.id]; throw e; });
+    return files[n.id];
+  }
+
+  /* ---------- roster ---------- */
+  function rosterTable(w, depts, isThis) {
+    var t = today();
+    var head = '<tr><th class="name">Name</th>' + w.days.map(function (d) {
+      return '<th class="' + (isThis && d.date === t ? "today" : "") + '">' + esc(d.label) + "</th>";
+    }).join("") + "</tr>";
+    var body = depts.map(function (g) {
+      return '<tr class="dept"><td colspan="8">' + esc(g.dept) + "</td></tr>" + g.people.map(function (p, n) {
+        return "<tr" + (n % 2 ? ' class="z"' : "") + '><td class="name">' + esc(p.name) + "</td>" + p.days.map(function (cell, i) {
+          var cls = isThis && w.days[i].date === t ? ' class="today"' : "";
+          return "<td" + cls + ">" + cell.map(function (s) {
+            return '<span class="l"><span class="s ' + esc(s.s) + '">' + esc(s.t) + "</span>" + (s.n ? '<span class="n">' + esc(s.n) + "</span>" : "") + "</span>";
+          }).join("") + "</td>";
+        }).join("") + "</tr>";
+      }).join("");
+    }).join("");
+    return "<table><thead>" + head + "</thead><tbody>" + body + "</tbody></table>";
+  }
+  /* biggest font that fits; if even the smallest won't, split the departments over more slides */
+  function rosterSlides(w, title, isThis) {
+    var out = [], left = w.depts.slice(), probe = document.createElement("div");
+    probe.className = "slide show"; probe.style.visibility = "hidden";
+    $("stage").appendChild(probe);
+    var room = probe.clientHeight;
+    function fits(depts, fs) { probe.innerHTML = rosterTable(w, depts, isThis); probe.firstChild.style.setProperty("--fs", fs + "vh"); return probe.firstChild.offsetHeight <= room; }
+    while (left.length) {
+      var take = left.length, fs = 2.6;
+      while (fs > 1.05 && !fits(left.slice(0, take), fs)) fs -= 0.05;
+      while (take > 1 && !fits(left.slice(0, take), fs)) take--;
+      out.push({ kind: "roster", title: title, html: rosterTable(w, left.slice(0, take), isThis), fs: fs });
+      left = left.slice(take);
+    }
+    probe.remove();
+    if (out.length > 1) out.forEach(function (s, i) { s.title += " (" + (i + 1) + " of " + out.length + ")"; });
+    return out;
+  }
+  function range(w) {
+    var a = new Date(w.days[0].date + "T00:00:00"), b = new Date(w.days[6].date + "T00:00:00");
+    return a.toLocaleDateString("en-AU", { day: "numeric", month: "short" }) + " – " + b.toLocaleDateString("en-AU", { day: "numeric", month: "short" });
+  }
+
+  /* ---------- slides ---------- */
+  function build() {
+    var s = data.settings || {}, list = [];
+    (data.weeks || []).forEach(function (w, i) {
+      var title = range(w);
+      if (!w.have) return;                                   // 2026-11-11: not published - no slide
+      rosterSlides(w, title, i === 0).forEach(function (x) { x.secs = s.roster_secs; x.wk = i; list.push(x); });
+    });
+    list.push({ kind: "quote", title: "Quote of the day", secs: 10 });
+    list.push({ kind: "joke", title: "Joke of the day", secs: 10 });     // punchline at 5 s
+    (data.notices || []).forEach(function (n) { list.push({ kind: "notice", title: n.name.replace(/\.[a-z0-9]+$/i, "").replace(/^\d+[\s._-]*/, ""), notice: n, secs: n.secs || s.notice_secs }); });
+    slides = list;
+    $("store").textContent = data.store ? data.store.replace(/^Foodland\s+/, "") + " · Staff Board" : "Staff Notice Board";
+    $("upd").textContent = "Roster from the Hub · updated " + new Date().toLocaleTimeString("en-AU", { timeZone: TZ, hour: "numeric", minute: "2-digit" });
+    if (at >= slides.length) at = 0;
+  }
+  var lastShow = Date.now();
+  function show(i) {
+    clearTimeout(timer);
+    lastShow = Date.now();
+    if (!slides.length) { timer = setTimeout(function () { show(0); }, 10000); return; }
+    at = i % slides.length;
+    var sl = slides[at], st = $("stage");
+    $("what").textContent = sl.title;
+    document.body.dataset.k = sl.kind === "notice" || sl.kind === "quote" || sl.kind === "joke" ? "notice" : sl.wk === 0 ? "this" : "next";
+    $("pill").textContent = sl.wk === 0 ? "This week" : "Next week";
+    $("dots").innerHTML = slides.map(function (_, k) { return '<i class="' + (k === at ? "on" : "") + '"></i>'; }).join("");
+    if (sl.kind === "quote") {
+      var qd = quoteOfDay();
+      st.innerHTML = '<div class="slide show quote"><div class="toon">' + qd.toon + '</div><div class="qtext"><div class="qmark">&ldquo;</div><p></p>' +
+        '<div class="qwho"></div><div class="qby">Quote of the day</div></div></div>';
+      st.querySelector("p").textContent = qd.q[0];
+      st.querySelector(".qwho").textContent = qd.q[1] ? "— " + qd.q[1] : "";
+      timer = setTimeout(function () { show(at + 1); }, (sl.secs || 20) * 1000);
+      return;
+    }
+    if (sl.kind === "joke") {
+      var jd = jokeOfDay();
+      st.innerHTML = '<div class="slide show quote joke"><div class="toon">' + jd.toon + '</div><div class="qtext">' +
+        '<div class="bubble"><p class="jq"></p></div><p class="ja"></p><div class="qby">Joke of the day</div></div></div>';
+      st.querySelector(".jq").textContent = jd.j[0];
+      st.querySelector(".ja").textContent = jd.j[1];
+      setTimeout(function () { var a = st.querySelector(".ja"); if (a) a.classList.add("on"); }, 5000);
+      timer = setTimeout(function () { show(at + 1); }, (sl.secs || 20) * 1000);
+      return;
+    }
+    if (sl.kind === "roster") {
+      st.innerHTML = '<div class="slide show">' + sl.html + "</div>";
+      if (sl.fs) st.querySelector("table") && st.querySelector("table").style.setProperty("--fs", sl.fs + "vh");
+      timer = setTimeout(function () { show(at + 1); }, (sl.secs || 45) * 1000);
+      return;
+    }
+    loadFile(sl.notice).then(function (pages) {
+      var k = 0;
+      (function page() {
+        st.innerHTML = '<div class="slide show notice"></div>';
+        st.firstChild.appendChild(pages[k]);
+        if (pages.length > 1) $("what").textContent = sl.title + " (" + (k + 1) + " of " + pages.length + ")";
+        timer = setTimeout(function () { if (++k < pages.length) page(); else show(at + 1); }, (sl.secs || 20) * 1000);
+      })();
+    }).catch(function () { show(at + 1); });
+  }
+  function refresh(first) {
+    return get("").then(function (j) {
+      data = j; lastOk = Date.now(); save(j); msg("");
+      var keep = {};
+      (j.notices || []).forEach(function (n) { keep[n.id] = true; });
+      Object.keys(files).forEach(function (id) {
+        if (keep[id]) return;
+        Promise.resolve(files[id]).then(function (imgs) { (imgs || []).forEach(function (im) { if (im.src && im.src.indexOf("blob:") === 0) URL.revokeObjectURL(im.src); }); }).catch(function () {});
+        delete files[id];
+      });
+      build();
+      if (first || !started) start();          // the slides start on whichever load works first
+    }).catch(function (e) {
+      if (!data) {
+        var old = saved();
+        if (old) { data = old; build(); start(); }
+        else msg(!U || !K ? "This board link is missing its address or key - copy the full link from the Hub's Notice Board panel."
+          : "Can't load the board yet (" + e.message + "). Trying again in a minute.");
+      }
+      if (first) setTimeout(function () { refresh(!data); }, started ? 60000 : 20000);
+    });
+  }
+  var started = false, bootAt = Date.now();
+  /* 2026-11-10 watchdog: slides not moving for 4 minutes - move on; 10 minutes - load the page again.
+     And a fresh page every 4 hours while on, so a small TV stick's memory never fills up. */
+  setInterval(function () {
+    if (!started || !isOn()) return;
+    var still = Date.now() - lastShow;
+    if (still > 10 * 60 * 1000 || Date.now() - bootAt > 4 * 3600 * 1000) location.reload();
+    else if (still > 4 * 60 * 1000) show(at + 1);
+  }, 60000);
+  function start() { started = true; msg(""); show(0); }
+  /* belt and braces: still nothing on screen 3 minutes after power-on - load the page again */
+  setInterval(function () { if (!started && Date.now() - bootAt > 3 * 60 * 1000) location.reload(); }, 30000);
+  /* the page checks itself every 30 min and reloads when a newer board page is published (no remote needed) */
+  var BOARD_VER = "2026-11-11a";
+  setInterval(function () {
+    fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" }).then(function (r) { return r.text(); })
+      .then(function (t) { var m = /BOARD_VER = "([^"]+)"/.exec(t); if (m && m[1] !== BOARD_VER) location.reload(); })
+      .catch(function () {});
+  }, 30 * 60 * 1000);
+  /* 2026-11-10: when the TV stick sleeps (screen saver / energy saver) the page is paused; on waking it would sit
+     frozen with the old time - if the page has been paused for over 2 minutes, load it again */
+  var lastBeat = Date.now();
+  setInterval(function () { var gap = Date.now() - lastBeat; lastBeat = Date.now(); if (gap > 2 * 60 * 1000) location.reload(); }, 5000);
+  document.addEventListener("visibilitychange", function () {
+    if (!document.hidden && Date.now() - lastBeat > 2 * 60 * 1000) location.reload();
+  });
+  tick(); setInterval(tick, 15000);
+  refresh(true);
+  setInterval(function () { if (isOn()) refresh(false); }, POLL_MS);
+  if (navigator.wakeLock) navigator.wakeLock.request("screen").catch(function () {});
+})();
+</script>
+</body>
+</html>
